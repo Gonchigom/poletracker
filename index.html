@@ -53,145 +53,57 @@
     </table>
   </div>
 
-  <script>
-    const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-    const TX_CHAR_UUID      = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+<script>
+console.log("JS cargado OK");
 
-    let device, txChar;
-    let buffer = '';
-    let ciclos = [];
-    let totalEsperados = 0;
+window.addEventListener('load', () => {
 
-    const btnConectar = document.getElementById('btnConectar');
-    const btnLimpiar  = document.getElementById('btnLimpiar');
-    const estado      = document.getElementById('estado');
-    const cuerpo      = document.getElementById('cuerpoTabla');
-    const resumen     = document.getElementById('resumen');
+  const btnConectar = document.getElementById('btnConectar');
+  const estado = document.getElementById('estado');
 
-    function setEstado(msg) { estado.textContent = 'Estado: ' + msg; }
+  const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const RX_CHAR_UUID      = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+  const TX_CHAR_UUID      = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-    btnConectar.addEventListener('click', async () => {
-      try {
-        setEstado('buscando dispositivo...');
-        device = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [UART_SERVICE_UUID] }],
-          optionalServices: [UART_SERVICE_UUID]
-        });
+  let rxChar;
 
-        setEstado('conectando...');
-        const server  = await device.gatt.connect();
-        const service = await server.getPrimaryService(UART_SERVICE_UUID);
-        txChar        = await service.getCharacteristic(TX_CHAR_UUID);
+  function setEstado(msg) {
+    estado.textContent = "Estado: " + msg;
+  }
 
-        await txChar.startNotifications();
-        txChar.addEventListener('characteristicvaluechanged', onDatos);
+  btnConectar.addEventListener('click', async () => {
+    try {
+      setEstado("buscando...");
 
-        device.addEventListener('gattserverdisconnected', () => {
-          setEstado('desconectado');
-          btnConectar.disabled = false;
-        });
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [UART_SERVICE_UUID] }]
+      });
 
-        setEstado('conectado — esperando datos...');
-        btnConectar.disabled = true;
-        btnLimpiar.disabled  = false;
+      setEstado("conectando...");
 
-      } catch(e) {
-        setEstado('error: ' + e.message);
-      }
-    });
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(UART_SERVICE_UUID);
 
-    btnLimpiar.addEventListener('click', () => {
-      ciclos = [];
-      totalEsperados = 0;
-      cuerpo.innerHTML = '';
-      resumen.style.display = 'none';
-      setEstado('datos limpiados');
-    });
+      // 👇 ESTA ES LA CLAVE: TX = NOTIFICACIONES (lo que recibes)
+      const txChar = await service.getCharacteristic(TX_CHAR_UUID);
 
-    function onDatos(event) {
-      const valor = new TextDecoder().decode(event.target.value);
-      buffer += valor;
-      let lineas = buffer.split('\n');
-      buffer = lineas.pop();
-      for (const linea of lineas) {
-        procesarLinea(linea.trim());
-      }
+      await txChar.startNotifications();
+
+      txChar.addEventListener('characteristicvaluechanged', (event) => {
+        const value = new TextDecoder().decode(event.target.value);
+        console.log("RECIBIDO:", value);
+        setEstado(value);
+      });
+
+      setEstado("conectado (esperando HELLO)");
+
+    } catch (e) {
+      console.error(e);
+      setEstado("ERROR: " + e.message);
     }
+  });
 
-    function procesarLinea(linea) {
-      if (!linea) return;
-
-      if (linea.startsWith('INICIO_SESION')) {
-        const partes = linea.split(',');
-        totalEsperados = parseInt(partes[1]);
-        ciclos = [];
-        cuerpo.innerHTML = '';
-        resumen.style.display = 'none';
-        setEstado('recibiendo ' + totalEsperados + ' ciclos...');
-        return;
-      }
-
-      if (linea.startsWith('C,')) {
-        const p = linea.split(',');
-        const ciclo = {
-          timestamp:       parseInt(p[1]),
-          angulo:          parseFloat(p[2]),
-          magnitudImpacto: parseFloat(p[3]),
-          duracion:        parseInt(p[4])
-        };
-        ciclos.push(ciclo);
-        añadirFila(ciclo, ciclos.length);
-        setEstado('recibidos ' + ciclos.length + ' / ' + totalEsperados);
-        return;
-      }
-
-      if (linea === 'FIN_SESION') {
-        setEstado('sesión completa — ' + ciclos.length + ' ciclos');
-        calcularResumen();
-        return;
-      }
-    }
-
-    function añadirFila(ciclo, n) {
-      const tr = document.createElement('tr');
-      const t  = (ciclo.timestamp / 1000).toFixed(1);
-      tr.innerHTML = `
-        <td>${n}</td>
-        <td>${t}</td>
-        <td>${ciclo.angulo.toFixed(1)}</td>
-        <td>${ciclo.magnitudImpacto.toFixed(2)}</td>
-        <td>${ciclo.duracion}</td>
-      `;
-      cuerpo.appendChild(tr);
-    }
-
-    function calcularResumen() {
-      if (ciclos.length === 0) return;
-
-      let sA = 0, sI = 0, sD = 0;
-      let minA = 999, maxA = 0;
-      let minD = 99999, maxD = 0;
-
-      for (const c of ciclos) {
-        sA += c.angulo;
-        sI += c.magnitudImpacto;
-        sD += c.duracion;
-        if (c.angulo < minA) minA = c.angulo;
-        if (c.angulo > maxA) maxA = c.angulo;
-        if (c.duracion < minD) minD = c.duracion;
-        if (c.duracion > maxD) maxD = c.duracion;
-      }
-
-      const n = ciclos.length;
-      document.getElementById('rCiclos').textContent   = n;
-      document.getElementById('rAngulo').textContent   = (sA/n).toFixed(1) + '°';
-      document.getElementById('rAnguloMM').textContent = minA.toFixed(1) + '° / ' + maxA.toFixed(1) + '°';
-      document.getElementById('rApoyo').textContent    = (sD/n).toFixed(0) + ' ms';
-      document.getElementById('rApoyoMM').textContent  = minD + ' ms / ' + maxD + ' ms';
-      document.getElementById('rImpacto').textContent  = (sI/n).toFixed(2) + ' g';
-
-      resumen.style.display = 'block';
-    }
-  </script>
+});
+</script>
 </body>
 </html>
