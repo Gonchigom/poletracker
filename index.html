@@ -1,11 +1,43 @@
-function onDatos(event) {
-  const valor = new TextDecoder().decode(event.target.value);
-  console.log('RAW:', valor); // <-- añade esto
-  buffer += valor;
-  let lineas = buffer.split('\n');
-  buffer = lineas.pop();
-  for (const linea of lineas) {
-    console.log('LINEA:', linea); // <-- y esto
-    procesarLinea(linea.trim());
+<script>
+  const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const RX_CHAR_UUID      = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // (por si luego escribes)
+  const TX_CHAR_UUID      = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+  let device, txChar;
+
+  const btn = document.getElementById('btnConectar');
+  const estado = document.getElementById('estado');
+
+  function setEstado(msg) {
+    estado.textContent = 'Estado: ' + msg;
   }
-}
+
+  btn.addEventListener('click', async () => {
+    try {
+      setEstado('buscando...');
+
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [UART_SERVICE_UUID] }]
+      });
+
+      setEstado('conectando...');
+
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(UART_SERVICE_UUID);
+
+      txChar = await service.getCharacteristic(TX_CHAR_UUID);
+
+      await txChar.startNotifications();
+      txChar.addEventListener('characteristicvaluechanged', (event) => {
+        const text = new TextDecoder().decode(event.target.value);
+        console.log("RECIBIDO:", text);
+        setEstado("recibido: " + text);
+      });
+
+      setEstado('conectado');
+
+    } catch (e) {
+      setEstado('error: ' + e.message);
+    }
+  });
+</script>
