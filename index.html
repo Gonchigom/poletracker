@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PoleTracker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -24,7 +25,7 @@
 
     .resumen-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 12px; margin: 24px 0;
     }
     .card {
@@ -35,6 +36,12 @@
     .card .label { font-size: 0.72rem; color: #8b949e; margin-top: 4px; }
 
     .section { margin-bottom: 28px; }
+
+    .chart-container {
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 10px; padding: 16px;
+      margin-bottom: 28px;
+    }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     th {
@@ -48,7 +55,7 @@
     #log {
       background: #0d1117; border: 1px solid #30363d;
       border-radius: 6px; padding: 10px;
-      height: 160px; overflow-y: auto;
+      height: 140px; overflow-y: auto;
       font-size: 0.75rem; color: #3fb950; font-family: monospace;
     }
   </style>
@@ -66,13 +73,14 @@
     <div class="resumen-grid">
       <div class="card"><div class="valor" id="rTotal">—</div><div class="label">Ciclos</div></div>
       <div class="card"><div class="valor" id="rCadencia">—</div><div class="label">Cadencia (cpm)</div></div>
-      <div class="card"><div class="valor" id="rAngProm">—</div><div class="label">Ángulo prom (°)</div></div>
-      <div class="card"><div class="valor" id="rAngMin">—</div><div class="label">Ángulo mín (°)</div></div>
-      <div class="card"><div class="valor" id="rAngMax">—</div><div class="label">Ángulo máx (°)</div></div>
-      <div class="card"><div class="valor" id="rApoyoProm">—</div><div class="label">Apoyo prom (ms)</div></div>
-      <div class="card"><div class="valor" id="rApoyoMin">—</div><div class="label">Apoyo mín (ms)</div></div>
-      <div class="card"><div class="valor" id="rApoyoMax">—</div><div class="label">Apoyo máx (ms)</div></div>
+      <div class="card"><div class="valor" id="rAngProm">—</div><div class="label">Ángulo promedio (°)</div></div>
+      <div class="card"><div class="valor" id="rApoyoProm">—</div><div class="label">Apoyo promedio (ms)</div></div>
     </div>
+  </div>
+
+  <div class="chart-container">
+    <h2 style="margin-bottom:16px">Evolución durante la sesión</h2>
+    <canvas id="grafica" height="100"></canvas>
   </div>
 
   <div class="section">
@@ -97,13 +105,70 @@
   const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
   const TX_CHAR     = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-  let ciclos   = [];
-  let rxBuffer = '';
+  let ciclos      = [];
+  let rxBuffer    = '';
+  let txChar      = null;
+  let keepaliveInterval = null;
+  let primerTimestamp   = null;
 
   const logEl    = document.getElementById('log');
   const estadoEl = document.getElementById('estado');
   const tablaEl  = document.getElementById('tablaBody');
 
+  // ===== GRÁFICA =====
+  const ctx = document.getElementById('grafica').getContext('2d');
+  const grafica = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Ángulo plantación (°)',
+          data: [],
+          borderColor: '#58a6ff',
+          backgroundColor: 'rgba(88,166,255,0.1)',
+          tension: 0.3,
+          yAxisID: 'yAngulo'
+        },
+        {
+          label: 'Duración apoyo (ms)',
+          data: [],
+          borderColor: '#3fb950',
+          backgroundColor: 'rgba(63,185,80,0.1)',
+          tension: 0.3,
+          yAxisID: 'yApoyo'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#c9d1d9' } }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8b949e' },
+          grid:  { color: '#21262d' },
+          title: { display: true, text: 'Tiempo (s)', color: '#8b949e' }
+        },
+        yAngulo: {
+          type: 'linear', position: 'left',
+          ticks: { color: '#58a6ff' },
+          grid:  { color: '#21262d' },
+          title: { display: true, text: 'Ángulo (°)', color: '#58a6ff' }
+        },
+        yApoyo: {
+          type: 'linear', position: 'right',
+          ticks: { color: '#3fb950' },
+          grid:  { drawOnChartArea: false },
+          title: { display: true, text: 'Apoyo (ms)', color: '#3fb950' }
+        }
+      }
+    }
+  });
+
+  // ===== HELPERS =====
   function log(msg) {
     logEl.innerHTML += msg + '<br>';
     logEl.scrollTop = logEl.scrollHeight;
@@ -115,22 +180,38 @@
     estadoEl.style.color = color;
   }
 
+  function marcarDesconectado() {
+    setEstado('Desconectado', '#f85149');
+    log('Dispositivo desconectado');
+    if (keepaliveInterval) { clearInterval(keepaliveInterval); keepaliveInterval = null; }
+  }
+
+  // ===== KEEPALIVE: detecta desconexión leyendo la característica cada 3s =====
+  function iniciarKeepalive() {
+    keepaliveInterval = setInterval(async () => {
+      if (!txChar) return;
+      try {
+        await txChar.readValue();
+      } catch (e) {
+        marcarDesconectado();
+      }
+    }, 3000);
+  }
+
+  // ===== CONEXIÓN =====
   document.getElementById('btnConectar').onclick = async () => {
     if (!navigator.bluetooth) {
       alert('Web Bluetooth no disponible. Usa Chrome en escritorio o Android.');
       return;
     }
     try {
-      log('Buscando PoleTracker...');
+      log('Buscando Pole...');
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ name: 'Pole' }],
         optionalServices: [NUS_SERVICE]
       });
 
-      device.addEventListener('gattserverdisconnected', () => {
-        setEstado('Desconectado', '#f85149');
-        log('Dispositivo desconectado');
-      });
+      device.addEventListener('gattserverdisconnected', marcarDesconectado);
 
       log('Conectando...');
       const server  = await device.gatt.connect();
@@ -139,12 +220,13 @@
       const service = await server.getPrimaryService(NUS_SERVICE);
 
       log('Suscribiendo notificaciones...');
-      const txChar  = await service.getCharacteristic(TX_CHAR);
+      txChar = await service.getCharacteristic(TX_CHAR);
       await txChar.startNotifications();
       txChar.addEventListener('characteristicvaluechanged', onDatos);
 
       setEstado('✅ Conectado — esperando datos...', '#3fb950');
       log('Listo. El XIAO enviará la sesión automáticamente.');
+      iniciarKeepalive();
 
     } catch (err) {
       log('ERROR: ' + err);
@@ -152,6 +234,7 @@
     }
   };
 
+  // ===== RECEPCIÓN =====
   function onDatos(event) {
     const chunk = new TextDecoder().decode(event.target.value);
     rxBuffer += chunk;
@@ -166,8 +249,13 @@
     log('← ' + linea);
 
     if (linea.startsWith('INICIO_SESION')) {
-      ciclos = [];
+      ciclos          = [];
+      primerTimestamp = null;
       tablaEl.innerHTML = '';
+      grafica.data.labels   = [];
+      grafica.data.datasets[0].data = [];
+      grafica.data.datasets[1].data = [];
+      grafica.update();
       const n = parseInt(linea.split(',')[1]);
       log('Sesión iniciada: ' + n + ' ciclos esperados');
 
@@ -179,24 +267,39 @@
         magnitud:  parseFloat(p[3]),
         duracion:  parseInt(p[4])
       };
+
+      // Tiempo relativo al primer impacto
+      if (primerTimestamp === null) primerTimestamp = c.timestamp;
+      const tiempoRelativo = ((c.timestamp - primerTimestamp) / 1000).toFixed(1);
+
       ciclos.push(c);
+
+      // Tabla
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${ciclos.length}</td>
-        <td>${(c.timestamp / 1000).toFixed(1)}</td>
+        <td>${tiempoRelativo}</td>
         <td>${c.angulo.toFixed(1)}°</td>
         <td>${c.magnitud.toFixed(2)} g</td>
         <td>${c.duracion > 0 ? c.duracion : '—'}</td>`;
       tablaEl.appendChild(tr);
       tablaEl.lastChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
+      // Gráfica — solo añadimos si tiene duración (ciclo completo)
+      grafica.data.labels.push(tiempoRelativo + 's');
+      grafica.data.datasets[0].data.push(c.angulo);
+      grafica.data.datasets[1].data.push(c.duracion > 0 ? c.duracion : null);
+      grafica.update('none'); // sin animación para que sea fluido
+
     } else if (linea === 'FIN_SESION') {
       log('✅ Sesión completa');
       setEstado('✅ Sesión recibida', '#3fb950');
+      grafica.update();
       calcularResumen();
     }
   }
 
+  // ===== RESUMEN =====
   function calcularResumen() {
     const validos = ciclos.filter(c => c.duracion > 0);
     if (!validos.length) return;
@@ -213,12 +316,8 @@
 
     document.getElementById('rTotal').textContent     = validos.length;
     document.getElementById('rCadencia').textContent  = cadencia.toFixed(1);
-    document.getElementById('rAngProm').textContent   = prom(angulos).toFixed(1);
-    document.getElementById('rAngMin').textContent    = Math.min(...angulos).toFixed(1);
-    document.getElementById('rAngMax').textContent    = Math.max(...angulos).toFixed(1);
-    document.getElementById('rApoyoProm').textContent = Math.round(prom(apoyos));
-    document.getElementById('rApoyoMin').textContent  = Math.min(...apoyos);
-    document.getElementById('rApoyoMax').textContent  = Math.max(...apoyos);
+    document.getElementById('rAngProm').textContent   = prom(angulos).toFixed(1) + '°';
+    document.getElementById('rApoyoProm').textContent = Math.round(prom(apoyos)) + ' ms';
   }
 </script>
 </body>
