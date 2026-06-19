@@ -3,45 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trail Poles Monitor</title>
+  <title>PoleTracker</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', sans-serif;
       background: #0d1117; color: #c9d1d9;
-      padding: 24px; min-height: 100vh;
+      padding: 24px;
     }
     h1 { color: #58a6ff; margin-bottom: 20px; font-size: 1.5rem; }
-    h2 { color: #8b949e; font-size: 1rem; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
-
+    h2 { color: #8b949e; font-size: 0.8rem; margin-bottom: 12px;
+         text-transform: uppercase; letter-spacing: 1px; }
     .btn {
       padding: 10px 22px; border: none; border-radius: 6px;
       font-size: 0.95rem; cursor: pointer; margin-right: 10px;
+      background: #238636; color: white;
     }
-    #btnConectar    { background: #238636; color: white; }
-    #btnConectar:hover { background: #2ea043; }
-
-    #estado {
-      display: inline-block; margin-left: 12px;
-      font-size: 0.9rem; color: #8b949e;
-    }
+    .btn:hover { background: #2ea043; }
+    #estado { font-size: 0.9rem; color: #8b949e; margin-left: 10px; }
 
     .resumen-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
       gap: 12px; margin: 24px 0;
     }
     .card {
       background: #161b22; border: 1px solid #30363d;
       border-radius: 10px; padding: 16px; text-align: center;
     }
-    .card .valor { font-size: 1.8rem; color: #58a6ff; font-weight: bold; }
-    .card .label { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
+    .card .valor { font-size: 1.6rem; color: #58a6ff; font-weight: bold; }
+    .card .label { font-size: 0.72rem; color: #8b949e; margin-top: 4px; }
 
-    table {
-      width: 100%; border-collapse: collapse;
-      font-size: 0.85rem; margin-bottom: 24px;
-    }
+    .section { margin-bottom: 28px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     th {
       background: #161b22; color: #8b949e;
       padding: 10px 12px; text-align: left;
@@ -53,17 +48,13 @@
     #log {
       background: #0d1117; border: 1px solid #30363d;
       border-radius: 6px; padding: 10px;
-      height: 140px; overflow-y: auto;
-      font-size: 0.75rem; color: #3fb950;
-      font-family: monospace;
+      height: 160px; overflow-y: auto;
+      font-size: 0.75rem; color: #3fb950; font-family: monospace;
     }
-    .section { margin-bottom: 28px; }
-    #tablaBody tr td:nth-child(3) { color: #f0883e; }  /* ángulo */
-    #tablaBody tr td:nth-child(4) { color: #ff7b72; }  /* magnitud */
   </style>
 </head>
 <body>
-  <h1>🏔️ Trail Poles Monitor</h1>
+  <h1>🏔️ PoleTracker</h1>
 
   <div class="section">
     <button class="btn" id="btnConectar">Conectar BLE</button>
@@ -75,9 +66,9 @@
     <div class="resumen-grid">
       <div class="card"><div class="valor" id="rTotal">—</div><div class="label">Ciclos</div></div>
       <div class="card"><div class="valor" id="rCadencia">—</div><div class="label">Cadencia (cpm)</div></div>
-      <div class="card"><div class="valor" id="rAngProm">—</div><div class="label">Ángulo promedio</div></div>
-      <div class="card"><div class="valor" id="rAngMin">—</div><div class="label">Ángulo mín</div></div>
-      <div class="card"><div class="valor" id="rAngMax">—</div><div class="label">Ángulo máx</div></div>
+      <div class="card"><div class="valor" id="rAngProm">—</div><div class="label">Ángulo prom (°)</div></div>
+      <div class="card"><div class="valor" id="rAngMin">—</div><div class="label">Ángulo mín (°)</div></div>
+      <div class="card"><div class="valor" id="rAngMax">—</div><div class="label">Ángulo máx (°)</div></div>
       <div class="card"><div class="valor" id="rApoyoProm">—</div><div class="label">Apoyo prom (ms)</div></div>
       <div class="card"><div class="valor" id="rApoyoMin">—</div><div class="label">Apoyo mín (ms)</div></div>
       <div class="card"><div class="valor" id="rApoyoMax">—</div><div class="label">Apoyo máx (ms)</div></div>
@@ -85,15 +76,12 @@
   </div>
 
   <div class="section">
-    <h2>Ciclos detallados</h2>
+    <h2>Ciclos</h2>
     <table>
       <thead>
         <tr>
-          <th>#</th>
-          <th>Tiempo (s)</th>
-          <th>Ángulo (°)</th>
-          <th>Magnitud (g)</th>
-          <th>Apoyo (ms)</th>
+          <th>#</th><th>Tiempo (s)</th><th>Ángulo (°)</th>
+          <th>Magnitud (g)</th><th>Apoyo (ms)</th>
         </tr>
       </thead>
       <tbody id="tablaBody"></tbody>
@@ -107,13 +95,12 @@
 
 <script>
   const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  const TX_CHAR     = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // XIAO → Web
-  const RX_CHAR     = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Web → XIAO
+  const TX_CHAR     = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-  let ciclos    = [];
-  let rxBuffer  = '';
+  let ciclos   = [];
+  let rxBuffer = '';
 
-  const logEl   = document.getElementById('log');
+  const logEl    = document.getElementById('log');
   const estadoEl = document.getElementById('estado');
   const tablaEl  = document.getElementById('tablaBody');
 
@@ -133,11 +120,10 @@
       alert('Web Bluetooth no disponible. Usa Chrome en escritorio o Android.');
       return;
     }
-
     try {
-      log('Buscando XIAO-TRAIL...');
+      log('Buscando PoleTracker...');
       const device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'XIAO-TRAIL' }],
+        filters: [{ name: 'PoleTracker' }],
         optionalServices: [NUS_SERVICE]
       });
 
@@ -146,41 +132,31 @@
         log('Dispositivo desconectado');
       });
 
-      log('Conectando a GATT...');
-      const server = await device.gatt.connect();
+      log('Conectando...');
+      const server  = await device.gatt.connect();
 
-      log('Obteniendo servicio NUS...');
+      log('Obteniendo servicio...');
       const service = await server.getPrimaryService(NUS_SERVICE);
 
-      // ===== CLAVE: TX primero, con await =====
-      log('Suscribiendo a notificaciones TX...');
-      const txChar = await service.getCharacteristic(TX_CHAR);
-      await txChar.startNotifications();           // <- await obligatorio
+      log('Suscribiendo notificaciones...');
+      const txChar  = await service.getCharacteristic(TX_CHAR);
+      await txChar.startNotifications();
       txChar.addEventListener('characteristicvaluechanged', onDatos);
-      log('Notificaciones TX activas');
 
-      // ===== LUEGO enviamos GET por RX =====
-      log('Enviando GET...');
-      const rxChar = await service.getCharacteristic(RX_CHAR);
-      await rxChar.writeValue(new TextEncoder().encode('GET'));
-
-      setEstado('✅ Conectado — recibiendo datos...', '#3fb950');
-      log('GET enviado, esperando sesión...');
+      setEstado('✅ Conectado — esperando datos...', '#3fb950');
+      log('Listo. El XIAO enviará la sesión automáticamente.');
 
     } catch (err) {
       log('ERROR: ' + err);
-      setEstado('Error de conexión', '#f85149');
+      setEstado('Error', '#f85149');
     }
   };
 
   function onDatos(event) {
     const chunk = new TextDecoder().decode(event.target.value);
     rxBuffer += chunk;
-
-    // Procesar líneas completas (los paquetes BLE pueden llegar fragmentados)
     const lineas = rxBuffer.split('\n');
-    rxBuffer = lineas.pop(); // lo que queda sin \n vuelve al buffer
-
+    rxBuffer = lineas.pop();
     lineas.forEach(procesarLinea);
   }
 
@@ -193,63 +169,56 @@
       ciclos = [];
       tablaEl.innerHTML = '';
       const n = parseInt(linea.split(',')[1]);
-      log(`Sesión iniciada: ${n} ciclos esperados`);
+      log('Sesión iniciada: ' + n + ' ciclos esperados');
 
     } else if (linea.startsWith('C,')) {
       const p = linea.split(',');
-      const ciclo = {
+      const c = {
         timestamp: parseInt(p[1]),
         angulo:    parseFloat(p[2]),
         magnitud:  parseFloat(p[3]),
         duracion:  parseInt(p[4])
       };
-      ciclos.push(ciclo);
-      añadirFila(ciclos.length, ciclo);
+      ciclos.push(c);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ciclos.length}</td>
+        <td>${(c.timestamp / 1000).toFixed(1)}</td>
+        <td>${c.angulo.toFixed(1)}°</td>
+        <td>${c.magnitud.toFixed(2)} g</td>
+        <td>${c.duracion > 0 ? c.duracion : '—'}</td>`;
+      tablaEl.appendChild(tr);
+      tablaEl.lastChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     } else if (linea === 'FIN_SESION') {
-      log('✅ Sesión completa recibida');
+      log('✅ Sesión completa');
       setEstado('✅ Sesión recibida', '#3fb950');
       calcularResumen();
     }
   }
 
-  function añadirFila(n, c) {
-    const tr = document.createElement('tr');
-    const ts = c.timestamp > 0 ? (c.timestamp / 1000).toFixed(1) : '—';
-    const dur = c.duracion > 0 ? c.duracion : '—';
-    tr.innerHTML = `
-      <td>${n}</td>
-      <td>${ts}</td>
-      <td>${c.angulo.toFixed(1)}°</td>
-      <td>${c.magnitud.toFixed(2)} g</td>
-      <td>${dur}</td>
-    `;
-    tablaEl.appendChild(tr);
-    tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-
   function calcularResumen() {
     const validos = ciclos.filter(c => c.duracion > 0);
-    if (validos.length === 0) return;
+    if (!validos.length) return;
 
-    const angulos  = validos.map(c => c.angulo);
-    const apoyos   = validos.map(c => c.duracion);
-    const prom = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const angulos = validos.map(c => c.angulo);
+    const apoyos  = validos.map(c => c.duracion);
+    const prom    = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
 
     let cadencia = 0;
     if (ciclos.length > 1) {
-      const durSesion = ciclos[ciclos.length - 1].timestamp - ciclos[0].timestamp;
-      if (durSesion > 0) cadencia = ((ciclos.length - 1) * 60000) / durSesion;
+      const dur = ciclos[ciclos.length - 1].timestamp - ciclos[0].timestamp;
+      if (dur > 0) cadencia = ((ciclos.length - 1) * 60000) / dur;
     }
 
-    document.getElementById('rTotal').textContent      = validos.length;
-    document.getElementById('rCadencia').textContent   = cadencia.toFixed(1);
-    document.getElementById('rAngProm').textContent    = prom(angulos).toFixed(1) + '°';
-    document.getElementById('rAngMin').textContent     = Math.min(...angulos).toFixed(1) + '°';
-    document.getElementById('rAngMax').textContent     = Math.max(...angulos).toFixed(1) + '°';
-    document.getElementById('rApoyoProm').textContent  = Math.round(prom(apoyos));
-    document.getElementById('rApoyoMin').textContent   = Math.min(...apoyos);
-    document.getElementById('rApoyoMax').textContent   = Math.max(...apoyos);
+    document.getElementById('rTotal').textContent     = validos.length;
+    document.getElementById('rCadencia').textContent  = cadencia.toFixed(1);
+    document.getElementById('rAngProm').textContent   = prom(angulos).toFixed(1);
+    document.getElementById('rAngMin').textContent    = Math.min(...angulos).toFixed(1);
+    document.getElementById('rAngMax').textContent    = Math.max(...angulos).toFixed(1);
+    document.getElementById('rApoyoProm').textContent = Math.round(prom(apoyos));
+    document.getElementById('rApoyoMin').textContent  = Math.min(...apoyos);
+    document.getElementById('rApoyoMax').textContent  = Math.max(...apoyos);
   }
 </script>
 </body>
