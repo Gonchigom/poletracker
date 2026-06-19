@@ -2,108 +2,254 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>XIAO IMU Monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trail Poles Monitor</title>
   <style>
-    body { font-family: monospace; background: #0d1117; color: #c9d1d9; 
-           display: flex; flex-direction: column; align-items: center; padding: 40px; }
-    h1 { color: #58a6ff; }
-    button { padding: 12px 24px; margin: 8px; border: none; border-radius: 6px;
-             font-size: 1rem; cursor: pointer; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d1117; color: #c9d1d9;
+      padding: 24px; min-height: 100vh;
+    }
+    h1 { color: #58a6ff; margin-bottom: 20px; font-size: 1.5rem; }
+    h2 { color: #8b949e; font-size: 1rem; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
+
+    .btn {
+      padding: 10px 22px; border: none; border-radius: 6px;
+      font-size: 0.95rem; cursor: pointer; margin-right: 10px;
+    }
     #btnConectar    { background: #238636; color: white; }
-    #btnDesconectar { background: #da3633; color: white; }
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px;
-            padding: 30px; margin: 20px; min-width: 320px; text-align: center; }
-    .valor { font-size: 2.5rem; color: #58a6ff; margin: 6px 0; }
-    .label { color: #8b949e; font-size: 0.85rem; }
-    #estado { margin: 10px; color: #8b949e; }
-    #log { background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
-           padding: 10px; height: 150px; overflow-y: auto; 
-           font-size: 0.75rem; color: #3fb950; width: 400px; text-align: left; }
+    #btnConectar:hover { background: #2ea043; }
+
+    #estado {
+      display: inline-block; margin-left: 12px;
+      font-size: 0.9rem; color: #8b949e;
+    }
+
+    .resumen-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; margin: 24px 0;
+    }
+    .card {
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 10px; padding: 16px; text-align: center;
+    }
+    .card .valor { font-size: 1.8rem; color: #58a6ff; font-weight: bold; }
+    .card .label { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.85rem; margin-bottom: 24px;
+    }
+    th {
+      background: #161b22; color: #8b949e;
+      padding: 10px 12px; text-align: left;
+      border-bottom: 1px solid #30363d;
+    }
+    td { padding: 8px 12px; border-bottom: 1px solid #21262d; }
+    tr:hover td { background: #161b22; }
+
+    #log {
+      background: #0d1117; border: 1px solid #30363d;
+      border-radius: 6px; padding: 10px;
+      height: 140px; overflow-y: auto;
+      font-size: 0.75rem; color: #3fb950;
+      font-family: monospace;
+    }
+    .section { margin-bottom: 28px; }
+    #tablaBody tr td:nth-child(3) { color: #f0883e; }  /* ángulo */
+    #tablaBody tr td:nth-child(4) { color: #ff7b72; }  /* magnitud */
   </style>
 </head>
 <body>
-  <h1>XIAO IMU Monitor</h1>
-  <div>
-    <button id="btnConectar">Conectar BLE</button>
-    <button id="btnDesconectar">Desconectar</button>
-  </div>
-  <p id="estado">Desconectado</p>
+  <h1>🏔️ Trail Poles Monitor</h1>
 
-  <div class="card">
-    <div class="label">Aceleración X</div>
-    <div class="valor" id="ax">—</div>
-    <div class="label">Aceleración Y</div>
-    <div class="valor" id="ay">—</div>
-    <div class="label">Aceleración Z</div>
-    <div class="valor" id="az">—</div>
-    <div class="label" id="ts"></div>
+  <div class="section">
+    <button class="btn" id="btnConectar">Conectar BLE</button>
+    <span id="estado">Desconectado</span>
   </div>
 
-  <div id="log"></div>
+  <div class="section">
+    <h2>Resumen de sesión</h2>
+    <div class="resumen-grid">
+      <div class="card"><div class="valor" id="rTotal">—</div><div class="label">Ciclos</div></div>
+      <div class="card"><div class="valor" id="rCadencia">—</div><div class="label">Cadencia (cpm)</div></div>
+      <div class="card"><div class="valor" id="rAngProm">—</div><div class="label">Ángulo promedio</div></div>
+      <div class="card"><div class="valor" id="rAngMin">—</div><div class="label">Ángulo mín</div></div>
+      <div class="card"><div class="valor" id="rAngMax">—</div><div class="label">Ángulo máx</div></div>
+      <div class="card"><div class="valor" id="rApoyoProm">—</div><div class="label">Apoyo prom (ms)</div></div>
+      <div class="card"><div class="valor" id="rApoyoMin">—</div><div class="label">Apoyo mín (ms)</div></div>
+      <div class="card"><div class="valor" id="rApoyoMax">—</div><div class="label">Apoyo máx (ms)</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Ciclos detallados</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Tiempo (s)</th>
+          <th>Ángulo (°)</th>
+          <th>Magnitud (g)</th>
+          <th>Apoyo (ms)</th>
+        </tr>
+      </thead>
+      <tbody id="tablaBody"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
 
 <script>
-  const SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
-  const CHAR_UUID    = '19b10001-e8f2-537e-4f6c-d104768a1214';
+  const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const TX_CHAR     = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // XIAO → Web
+  const RX_CHAR     = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Web → XIAO
 
-  let device, server, characteristic;
-  const log = (msg) => {
-    const div = document.getElementById('log');
-    div.innerHTML += msg + '<br>';
-    div.scrollTop = div.scrollHeight;
+  let ciclos    = [];
+  let rxBuffer  = '';
+
+  const logEl   = document.getElementById('log');
+  const estadoEl = document.getElementById('estado');
+  const tablaEl  = document.getElementById('tablaBody');
+
+  function log(msg) {
+    logEl.innerHTML += msg + '<br>';
+    logEl.scrollTop = logEl.scrollHeight;
     console.log(msg);
-  };
+  }
+
+  function setEstado(txt, color = '#8b949e') {
+    estadoEl.textContent = txt;
+    estadoEl.style.color = color;
+  }
 
   document.getElementById('btnConectar').onclick = async () => {
+    if (!navigator.bluetooth) {
+      alert('Web Bluetooth no disponible. Usa Chrome en escritorio o Android.');
+      return;
+    }
+
     try {
-      log('Buscando dispositivo...');
-      device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'XIAO-IMU' }],
-        optionalServices: [SERVICE_UUID]
+      log('Buscando XIAO-TRAIL...');
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: 'XIAO-TRAIL' }],
+        optionalServices: [NUS_SERVICE]
       });
 
       device.addEventListener('gattserverdisconnected', () => {
-        document.getElementById('estado').textContent = 'Desconectado';
+        setEstado('Desconectado', '#f85149');
         log('Dispositivo desconectado');
       });
 
       log('Conectando a GATT...');
-      server = await device.gatt.connect();
+      const server = await device.gatt.connect();
 
-      log('Obteniendo servicio...');
-      const service = await server.getPrimaryService(SERVICE_UUID);
+      log('Obteniendo servicio NUS...');
+      const service = await server.getPrimaryService(NUS_SERVICE);
 
-      log('Obteniendo característica...');
-      characteristic = await service.getCharacteristic(CHAR_UUID);
+      // ===== CLAVE: TX primero, con await =====
+      log('Suscribiendo a notificaciones TX...');
+      const txChar = await service.getCharacteristic(TX_CHAR);
+      await txChar.startNotifications();           // <- await obligatorio
+      txChar.addEventListener('characteristicvaluechanged', onDatos);
+      log('Notificaciones TX activas');
 
-      log('Activando notificaciones...');
-      await characteristic.startNotifications();
-      characteristic.addEventListener('characteristicvaluechanged', onDatos);
+      // ===== LUEGO enviamos GET por RX =====
+      log('Enviando GET...');
+      const rxChar = await service.getCharacteristic(RX_CHAR);
+      await rxChar.writeValue(new TextEncoder().encode('GET'));
 
-      document.getElementById('estado').textContent = '✅ Conectado a ' + device.name;
-      log('¡Listo! Esperando datos...');
+      setEstado('✅ Conectado — recibiendo datos...', '#3fb950');
+      log('GET enviado, esperando sesión...');
 
     } catch (err) {
       log('ERROR: ' + err);
+      setEstado('Error de conexión', '#f85149');
     }
-  };
-
-  document.getElementById('btnDesconectar').onclick = async () => {
-    if (characteristic) await characteristic.stopNotifications();
-    if (server && server.connected) server.disconnect();
-    document.getElementById('estado').textContent = 'Desconectado';
-    log('Desconectado manualmente');
   };
 
   function onDatos(event) {
-    const raw = new TextDecoder().decode(event.target.value);
-    log('RAW: ' + raw);
-    const partes = raw.split(',');
-    if (partes.length === 3) {
-      document.getElementById('ax').textContent = parseFloat(partes[0]).toFixed(3) + ' g';
-      document.getElementById('ay').textContent = parseFloat(partes[1]).toFixed(3) + ' g';
-      document.getElementById('az').textContent = parseFloat(partes[2]).toFixed(3) + ' g';
-      document.getElementById('ts').textContent = new Date().toLocaleTimeString();
+    const chunk = new TextDecoder().decode(event.target.value);
+    rxBuffer += chunk;
+
+    // Procesar líneas completas (los paquetes BLE pueden llegar fragmentados)
+    const lineas = rxBuffer.split('\n');
+    rxBuffer = lineas.pop(); // lo que queda sin \n vuelve al buffer
+
+    lineas.forEach(procesarLinea);
+  }
+
+  function procesarLinea(linea) {
+    linea = linea.trim();
+    if (!linea) return;
+    log('← ' + linea);
+
+    if (linea.startsWith('INICIO_SESION')) {
+      ciclos = [];
+      tablaEl.innerHTML = '';
+      const n = parseInt(linea.split(',')[1]);
+      log(`Sesión iniciada: ${n} ciclos esperados`);
+
+    } else if (linea.startsWith('C,')) {
+      const p = linea.split(',');
+      const ciclo = {
+        timestamp: parseInt(p[1]),
+        angulo:    parseFloat(p[2]),
+        magnitud:  parseFloat(p[3]),
+        duracion:  parseInt(p[4])
+      };
+      ciclos.push(ciclo);
+      añadirFila(ciclos.length, ciclo);
+
+    } else if (linea === 'FIN_SESION') {
+      log('✅ Sesión completa recibida');
+      setEstado('✅ Sesión recibida', '#3fb950');
+      calcularResumen();
     }
+  }
+
+  function añadirFila(n, c) {
+    const tr = document.createElement('tr');
+    const ts = c.timestamp > 0 ? (c.timestamp / 1000).toFixed(1) : '—';
+    const dur = c.duracion > 0 ? c.duracion : '—';
+    tr.innerHTML = `
+      <td>${n}</td>
+      <td>${ts}</td>
+      <td>${c.angulo.toFixed(1)}°</td>
+      <td>${c.magnitud.toFixed(2)} g</td>
+      <td>${dur}</td>
+    `;
+    tablaEl.appendChild(tr);
+    tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function calcularResumen() {
+    const validos = ciclos.filter(c => c.duracion > 0);
+    if (validos.length === 0) return;
+
+    const angulos  = validos.map(c => c.angulo);
+    const apoyos   = validos.map(c => c.duracion);
+    const prom = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+    let cadencia = 0;
+    if (ciclos.length > 1) {
+      const durSesion = ciclos[ciclos.length - 1].timestamp - ciclos[0].timestamp;
+      if (durSesion > 0) cadencia = ((ciclos.length - 1) * 60000) / durSesion;
+    }
+
+    document.getElementById('rTotal').textContent      = validos.length;
+    document.getElementById('rCadencia').textContent   = cadencia.toFixed(1);
+    document.getElementById('rAngProm').textContent    = prom(angulos).toFixed(1) + '°';
+    document.getElementById('rAngMin').textContent     = Math.min(...angulos).toFixed(1) + '°';
+    document.getElementById('rAngMax').textContent     = Math.max(...angulos).toFixed(1) + '°';
+    document.getElementById('rApoyoProm').textContent  = Math.round(prom(apoyos));
+    document.getElementById('rApoyoMin').textContent   = Math.min(...apoyos);
+    document.getElementById('rApoyoMax').textContent   = Math.max(...apoyos);
   }
 </script>
 </body>
