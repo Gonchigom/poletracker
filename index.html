@@ -123,7 +123,7 @@
     try {
       log('Buscando PoleTracker...');
       const device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: 'PoleTracker' }],
+        acceptAllDevices: true,
         optionalServices: [NUS_SERVICE]
       });
 
